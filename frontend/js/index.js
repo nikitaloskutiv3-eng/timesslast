@@ -20,6 +20,7 @@ let isMobile = window.innerWidth <= 768;
 let userLastSeen = null;
 let isPageVisible = true;
 let statusUpdateInterval = null;
+let unreadCounts = {};  // ✅ Хранилище количества непрочитанных сообщений
 
 // 👁️ Отслеживание видимости вкладки
 document.addEventListener("visibilitychange", async () => {
@@ -214,6 +215,56 @@ async function getCurrentUser() {
     }
 }
 
+// ✅ Загрузить количество непрочитанных сообщений
+async function loadUnreadCounts() {
+    try {
+        const response = await fetch(`${API_URL}/messages/unread/counts`, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+            console.error("Error loading unread counts:", response.status);
+            return;
+        }
+        
+        unreadCounts = await response.json();
+        console.log("Unread counts:", unreadCounts);
+        
+        // Обновляем UI с бейджами
+        updateChatBadges();
+    } catch (error) {
+        console.error("Error loading unread counts:", error);
+    }
+}
+
+// ✅ Обновить бейджи непрочитанных сообщений в чатах
+function updateChatBadges() {
+    const chatItems = document.querySelectorAll(".chat-item");
+    
+    chatItems.forEach(item => {
+        // Удаляем старый бейдж если есть
+        const oldBadge = item.querySelector(".unread-badge");
+        if (oldBadge) {
+            oldBadge.remove();
+        }
+        
+        // Получаем chat-avatar для проверки chat_id
+        const avatar = item.querySelector(".chat-avatar");
+        if (!avatar) return;
+        
+        // Ищем chat_id в data атрибутах или по текстовому содержимому
+        const chatName = item.querySelector(".chat-name");
+        const chat = allChats.find(c => c.name === chatName?.textContent);
+        
+        if (chat && unreadCounts[chat.id] > 0) {
+            const badge = document.createElement("div");
+            badge.className = "unread-badge";
+            badge.textContent = unreadCounts[chat.id];
+            avatar.appendChild(badge);
+        }
+    });
+}
+
 // 📥 Загрузить чаты
 let allChats = [];
 async function loadChats() {
@@ -276,6 +327,9 @@ async function loadChats() {
             div.onclick = () => selectChat(chat);
             chatsList.appendChild(div);
         });
+        
+        // Обновляем бейджи после отрисовки чатов
+        updateChatBadges();
     } catch (error) {
         console.error("Error loading chats:", error);
     }
@@ -410,10 +464,40 @@ async function selectChat(chat) {
     }
     
     await loadMessages();
+    
+    // ✅ Отметить чат как прочитанный при открытии
+    markChatAsRead(chat.id);
+    
     connectWebSocket();
     startStatusAutoUpdate();
     if (isMobile) {
         showChat();
+    }
+}
+
+// ✅ Отметить весь чат как прочитанный
+async function markChatAsRead(chatId) {
+    try {
+        const response = await fetch(`${API_URL}/messages/chat/${chatId}/read-all`, {
+            method: "PUT",
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        });
+        
+        if (response.ok) {
+            unreadCounts[chatId] = 0;
+            updateChatBadges();
+            
+            // Отправляем событие через WebSocket
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: "chat_read_all"
+                }));
+            }
+        }
+    } catch (error) {
+        console.error("Error marking chat as read:", error);
     }
 }
 
@@ -473,9 +557,24 @@ function connectWebSocket() {
             const msg = JSON.parse(event.data);
             console.log("Message received:", msg);
             
-            if (!messageIds.has(msg.id)) {
-                messageIds.add(msg.id);
-                addMessageToUI(msg);
+            // ✅ Обработка различных типов событий
+            if (msg.type === "new_message") {
+                if (!messageIds.has(msg.id)) {
+                    messageIds.add(msg.id);
+                    addMessageToUI(msg);
+                }
+            } else if (msg.type === "message_read") {
+                // Сообщение было отмечено как прочитанное
+                updateMessageReadStatus(msg.message_id);
+            } else if (msg.type === "chat_read_all") {
+                // Весь чат был отмечен как прочитанный
+                location.reload();
+            } else {
+                // Старый формат - просто сообщение
+                if (!messageIds.has(msg.id)) {
+                    messageIds.add(msg.id);
+                    addMessageToUI(msg);
+                }
             }
         } catch (error) {
             console.error("Error parsing message:", error);
@@ -491,6 +590,18 @@ function connectWebSocket() {
         console.log("WebSocket disconnected");
         document.getElementById("chatStatus").textContent = "Подключение";
     };
+}
+
+// ✅ Обновить статус прочтения сообщения в UI
+function updateMessageReadStatus(messageId) {
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (messageElement) {
+        const badges = messageElement.querySelector(".message-status-badges");
+        if (badges) {
+            badges.classList.remove("unread");
+            badges.textContent = "✓✓";
+        }
+    }
 }
 
 //👤 Показать профиль собеседника из header чата
@@ -602,6 +713,7 @@ function addMessageToUI(msg) {
     
     const div = document.createElement("div");
     div.className = "message";
+    div.setAttribute("data-message-id", msg.id);
     
     if (msg.sender_id === currentUserId) {
         div.classList.add("sent");
@@ -614,10 +726,16 @@ function addMessageToUI(msg) {
         minute: '2-digit'
     });
     
+    // ✅ Добавляем галочки статуса (✓ или ✓✓)
+    const statusBadges = msg.sender_id === currentUserId 
+        ? `<div class="message-status-badges ${!msg.is_read ? 'unread' : ''}">${msg.is_read ? '✓✓' : '✓'}</div>`
+        : '';
+    
     div.innerHTML = `
         <div class="message-content">
             ${msg.content}
             <div class="message-time">${time}</div>
+            ${statusBadges}
         </div>
     `;
     
@@ -858,7 +976,7 @@ function logout(event) {
     window.location.href = "login.html";
 }
 
-// 🚀 ��апуск
+// 🚀 Запуск
 async function init() {
     console.log("=== APP INIT ===");
     
@@ -875,9 +993,12 @@ async function init() {
     currentUserId = user.id;
     currentUser = user;
     localStorage.setItem("user", JSON.stringify(user));
+    
     await loadChats();
+    await loadUnreadCounts();  // ✅ Загружаем счетчики непрочитанных
     
     setInterval(loadChats, 5000);
+    setInterval(loadUnreadCounts, 10000);  // ✅ Обновляем счетчики каждые 10 сек
 }
 
 // Обработка Enter для отправки сообщения
