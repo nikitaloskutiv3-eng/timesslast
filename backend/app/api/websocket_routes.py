@@ -50,19 +50,67 @@ async def websocket_endpoint(
         while True:
             data = await websocket.receive_text()
             
-            message_data = MessageCreate(
-                chat_id=chat_id,
-                content=data
-            )
-            message = message_service.send_message(db, message_data, user.id)
-            
-            await manager.broadcast(chat_id, {
-                "id": message.id,
-                "chat_id": message.chat_id,
-                "sender_id": message.sender_id,
-                "content": message.content,
-                "created_at": message.created_at.isoformat()
-            })
+            # ✅ Обработка различных типов событий
+            try:
+                event_data = json.loads(data)
+                event_type = event_data.get("type")
+                
+                # Обработка события прочтения сообщения
+                if event_type == "message_read":
+                    message_id = event_data.get("message_id")
+                    message_service.mark_message_as_read(db, message_id)
+                    
+                    # Отправляем уведомление всем в чате об этом
+                    await manager.broadcast(chat_id, {
+                        "type": "message_read",
+                        "message_id": message_id,
+                        "user_id": user.id
+                    })
+                
+                # Обработка отметить весь чат как прочитанный
+                elif event_type == "chat_read_all":
+                    message_service.mark_chat_as_read(db, chat_id, user.id)
+                    
+                    await manager.broadcast(chat_id, {
+                        "type": "chat_read_all",
+                        "user_id": user.id
+                    })
+                
+                # Обычное текстовое сообщение
+                else:
+                    message_data = MessageCreate(
+                        chat_id=chat_id,
+                        content=data if isinstance(data, str) else event_data.get("content", "")
+                    )
+                    message = message_service.send_message(db, message_data, user.id)
+                    
+                    await manager.broadcast(chat_id, {
+                        "type": "new_message",
+                        "id": message.id,
+                        "chat_id": message.chat_id,
+                        "sender_id": message.sender_id,
+                        "content": message.content,
+                        "created_at": message.created_at.isoformat(),
+                        "is_read": message.is_read
+                    })
+            except json.JSONDecodeError:
+                # Если не JSON, то это обычное текстовое сообщение
+                message_data = MessageCreate(
+                    chat_id=chat_id,
+                    content=data
+                )
+                message = message_service.send_message(db, message_data, user.id)
+                
+                await manager.broadcast(chat_id, {
+                    "type": "new_message",
+                    "id": message.id,
+                    "chat_id": message.chat_id,
+                    "sender_id": message.sender_id,
+                    "content": message.content,
+                    "created_at": message.created_at.isoformat(),
+                    "is_read": message.is_read
+                })
+                
     except Exception as e:
         print(f"WebSocket error: {e}")
     finally:
