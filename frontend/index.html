@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="css/index.css">
+    <title>Timess</title>
+</head>
+<body>
+<div class="app-container">
+    <!-- Боковая панель -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="menu-btn" onclick="toggleMenu()">⋮</button>
+            <div id="menuDropdown" class="menu-dropdown">
+                <a href="#" class="menu-item" onclick="openSettings(event)">⚙️ Настройки</a>
+                <div class="menu-item theme-toggle">
+                    <span>🌙 Темная тема</span>
+                    <button class="toggle-switch" id="themeToggle" onclick="toggleTheme()"></button>
+                </div>
+                <a href="#" class="menu-item danger" onclick="logout(event)">🚪 Выход</a>
+            </div>
+            <div class="sidebar-title">💬 Чаты</div>
+        </div>
+        
+        <div class="search-box">
+            <input id="searchInput" placeholder="Поиск пользователей..." type="text">
+            <div id="searchResults" class="search-results"></div>
+        </div>
+        
+        <div class="chats-list" id="chatsList">
+            <div class="empty-sidebar-message">Загрузка чатов...</div>
+        </div>
+    </div>
+
+    <!-- Основной контент -->
+    <div class="main-content hidden" id="mainContent">
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <button class="back-btn" onclick="goBack()">‹</button>
+
+                <div class="chat-item" style="margin:0; padding: 5px;" onclick="showChatMemberProfile()">
+                    <div class="chat-avatar" id="chatAvatar" style="display: none;"></div>
+                    <div class="chat-info">
+                        <div class="chat-name" id="chatName">Выберите чат</div>
+                        <div class="chat-header-status" id="chatStatus"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="messages-container" id="messagesContainer">
+            <div class="empty-state">
+                <div class="empty-state-icon">💬</div>
+                <div class="empty-state-text">Выберите чат</div>
+                <div class="empty-state-subtext">Найдите пользователя и начните переписку</div>
+            </div>
+        </div>
+        
+        <div class="message-input-area" id="inputArea" style="display: none;">
+            <input id="messageInput" placeholder="Напишите сообщение..." type="text">
+            <button class="send-btn" onclick="sendMessage()">
+                <img src="./send.png" alt="Send">
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Оверлей чистый, без ломающих классов -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeSettings(event)">
+  <div class="setting" id="setting" onclick="event.stopPropagation()"> 
+    <button class="close-btn" onclick="closeSettings(event)">×</button>
+    
+    <div id="avatar"></div> 
+    <p id="ausername">username</p>
+    
+    <!-- Режим просмотра -->
+    <div id="info" class="info-view"> 
+      <div class="info-row">
+        <p id="ausernameid" class="info-value"></p>
+        <span class="info-label">ID</span>
+      </div>
+      <div class="info-row">
+        <p id="abio" class="info-value"></p>
+        <span class="info-label">Описание</span>
+      </div>
+      <div class="info-row">
+        <p id="ahappy" class="info-value"></p>
+        <span class="info-label">День рождения</span>
+      </div>
+    </div>
+    
+    <!-- Режим редактирования (скрыт по умолчанию) -->
+    <div id="infoEdit" class="info-edit" style="display: none;">
+      <div class="edit-row">
+        <label>Имя пользователя:</label>
+        <input type="text" id="editUsername" placeholder="username">
+      </div>
+      <div class="edit-row">
+        <label>ID пользователя:</label>
+        <input type="text" id="editUsernameid" placeholder="@user5">
+      </div>
+      <div class="edit-row">
+        <label>Описание:</label>
+        <textarea id="editBio" placeholder="Напишите о себе..." maxlength="150"></textarea>
+      </div>
+      <div class="edit-row">
+        <label>День рождения:</label>
+        <input type="date" id="editBirthday">
+      </div>
+      <div class="edit-buttons">
+        <button class="btn-save" onclick="saveProfile()">Сохранить</button>
+        <button class="btn-cancel" onclick="cancelEdit()">Отмена</button>
+      </div>
+    </div>
+    
+    <!-- Кнопка редактирования -->
+    <button class="btn-edit" onclick="toggleEditMode()">✏️ Редактировать</button>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="js/index.js"></script>
+</body>
+</html>
